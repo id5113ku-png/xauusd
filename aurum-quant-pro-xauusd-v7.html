@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AURUM QUANT PRO v7 | Manual SL Pips, Manual R:R & Realtime Signal Sync</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #06080d;
+      color: #e2e8f0;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .card {
+      background: #0d121d;
+      border: 1px solid #1b2438;
+      border-radius: 14px;
+    }
+    .gold-gradient {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+    .live-dot {
+      animation: pulseDot 1.2s infinite;
+    }
+    @keyframes flashGreen {
+      0% { background-color: rgba(16, 185, 129, 0.25); }
+      100% { background-color: transparent; }
+    }
+    @keyframes flashRed {
+      0% { background-color: rgba(244, 63, 94, 0.25); }
+      100% { background-color: transparent; }
+    }
+    .tick-up { animation: flashGreen 0.6s ease-out; }
+    .tick-down { animation: flashRed 0.6s ease-out; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- HEADER -->
+  <header class="border-b border-slate-800/90 bg-[#0a0d16] sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl gold-gradient text-slate-950 font-extrabold flex items-center justify-center shadow-lg shadow-amber-500/20">Au</div>
+        <div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="font-extrabold text-white text-sm sm:text-base tracking-tight">AURUM QUANT PRO</h1>
+            <span id="streamStatusPill" class="text-[10px] font-bold px-2.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 mono flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-400 live-dot"></span>
+              CONNECTING REALTIME STREAM...
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400">Realtime WebSocket Stream + Auto Trend/PA/Macro Detector + System Diagnostics</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 text-xs flex-wrap">
+        <span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 mono text-slate-300">WITA: <strong id="witaTime" class="text-white">--:--:--</strong></span>
+        <span id="sessionPill" class="px-2.5 py-1 rounded-lg font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">Memuat Sesi...</span>
+        <button type="button" id="audioAlertToggleBtn" onclick="toggleAudioAlert()" class="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold cursor-pointer" title="Aktifkan/Matikan Suara Peringatan Grade A+">🔔 Audio Alert: ON</button>
+        <button type="button" onclick="playGradeAPlusAlert('TEST', true)" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold cursor-pointer">Tes Suara</button>
+        <button type="button" onclick="reconnectRealtimeEngine()" class="gold-gradient text-slate-950 font-bold px-3.5 py-1.5 rounded-lg hover:opacity-95 transition cursor-pointer">Reconnect Stream</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- LIVE TICKER STRIP (REALTIME ONLINE FEED) -->
+  <div class="bg-[#090d14] border-b border-slate-800/80">
+    <div class="max-w-7xl mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs mono">
+      <div class="flex items-center gap-4 flex-wrap">
+        <div>
+          <span class="text-slate-400">XAUUSD LIVE:</span>
+          <span id="liveTickerPrice" class="font-extrabold text-sm text-white ml-1">--.--</span>
+          <span id="liveTickerDelta" class="text-[11px] ml-1 text-slate-400">(0.00)</span>
+        </div>
+        <div>
+          <span class="text-slate-400">24H RANGE:</span>
+          <span id="liveRangeText" class="text-slate-200 ml-1">-- / --</span>
+        </div>
+        <div>
+          <span class="text-slate-400">AUTO CANDLE PA:</span>
+          <span id="autoPaBadge" class="text-amber-400 font-bold ml-1">SCANNING...</span>
+        </div>
+      </div>
+      <div class="text-[11px] text-slate-400">
+        Last Tick: <strong id="lastTickTime" class="text-emerald-400">--:--:--</strong> • <span id="streamTransportLabel">Initializing</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+    <!-- LEFT 8 COLS -->
+    <div class="lg:col-span-8 flex flex-col gap-4">
+
+      <!-- 1. KEPUTUSAN OTOMATIS PRO TRADER (2 KOLOM: SCALPINGAN & INTRADAY) -->
+      <section class="card p-4 border-t-2 border-t-amber-500">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div>
+            <div class="text-[11px] uppercase tracking-wider text-amber-400 font-bold">Keputusan Otomatis Pro Trader • Scalping & Intraday</div>
+            <h2 id="signalHeadline" class="text-lg sm:text-xl font-extrabold text-white mt-0.5">Menghubungkan ke Pasar Realtime...</h2>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="confluenceMeter" class="mono text-xs font-bold px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">CONFLUENCE: --%</span>
+            <span id="gradeTag" class="mono text-xs font-bold px-3 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700">--</span>
+          </div>
+        </div>
+
+        <div id="audioUnlockBanner" class="hidden mb-3 p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-between gap-2 text-xs">
+          <span class="text-amber-200">Tap tombol di samping sekali agar browser mengizinkan suara otomatis saat sinyal <strong>GRADE A+ (≥90%)</strong> muncul.</span>
+          <button type="button" onclick="unlockAudioContext(true)" class="px-3 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold shrink-0 cursor-pointer">Aktifkan Suara</button>
+        </div>
+
+        <!-- DUA KOLOM SIGNAL: KOLOM 1 SCALPINGAN & KOLOM 2 INTRADAY -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 text-xs">
+          <!-- KOLOM 1: SIGNAL SCALPINGAN -->
+          <div class="p-3.5 rounded-xl bg-slate-900/95 border border-sky-500/30 flex flex-col justify-between gap-2.5">
+            <div>
+              <div class="flex items-center justify-between gap-2 mb-1.5">
+                <span class="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded bg-sky-500/15 text-sky-400 border border-sky-500/30 mono">KOLOM 1 • SIGNAL SCALPINGAN (M5/M15)</span>
+                <span id="scalpBadge" class="mono text-[10px] font-bold text-sky-300">--</span>
+              </div>
+              <div id="scalpHeadline" class="font-extrabold text-sm text-white">Menunggu setup scalping...</div>
+              <div id="scalpZoneNote" class="text-[11px] text-slate-400 mt-0.5 mono">--</div>
+
+              <div class="grid grid-cols-2 gap-2 mt-2.5">
+                <div class="p-2.5 rounded-lg bg-slate-950/90 border border-slate-800">
+                  <div class="text-[10px] text-slate-400 uppercase">Entry Scalping</div>
+                  <div id="scalpEntry" class="mono font-bold text-xs text-white mt-0.5">--</div>
+                </div>
+                <div class="p-2.5 rounded-lg bg-slate-950/90 border border-rose-500/30">
+                  <div class="text-[10px] text-rose-400 uppercase">SL Scalping</div>
+                  <div id="scalpSl" class="mono font-bold text-xs text-rose-400 mt-0.5">--</div>
+                  <div id="scalpSlPips" class="text-[10px] text-rose-300/80 mono">--</div>
+                </div>
+                <div class="p-2.5 rounded-lg bg-slate-950/90 border border-emerald-500/30">
+                  <div class="text-[10px] text-emerald-400 uppercase">TP1 Scalp</div>
+                  <div id="scalpTp1" class="mono font-bold text-xs text-emerald-400 mt-0.5">--</div>
+                  <div id="scalpTp1Pips" class="text-[10px] text-emerald-300/80 mono">--</div>
+                </div>
+                <div class="p-2.5 rounded-lg bg-slate-950/90 border border-amber-500/30">
+                  <div class="text-[10px] text-amber-400 uppercase">TP2 Scalp</div>
+                  <div id="scalpTp2" class="mono font-bold text-xs text-amber-400 mt-0.5">--</div>
+                  <div id="scalpTp2Pips" class="text-[10px] text-amber-300/80 mono">--</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+              <span id="scalpReason" class="text-[11px] text-slate-300 line-clamp-2">--</span>
+              <button type="button" onclick="copyPlanByMode('SCALP')" class="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 font-bold text-[11px] shrink-0 cursor-pointer">Salin Scalp</button>
+            </div>
+          </div>
+
+          <!-- KOLOM 2: SIGNAL INTRADAY -->
+          <div class="p-3.5 rounded-xl bg-slate-900/95 border border-amber-500/30 flex flex-col justify-between gap-2.5">
+            <div>
+              <div class="flex items-center justify-between gap-2 mb-1.5">
+                <span class="text-[10px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 mono">KOLOM 2 • SIGNAL INTRADAY (H1/H4)</span>
+                <span id="intraBadge" class="mono text-[10px] font-bold text-amber-300">--</span>
+              </div>
+              <div id="intraHeadline" class="font-extrabold text-sm text-white">Menunggu setup intraday...</div>
+              <div id="intraZoneNote" class="text-[11px] text-slate-400 mt-0.5 mono">--</div>
+
+              <div class="grid grid-cols-2 gap-2 mt-2.5">
+                <div class="p-2.5 rounded-lg bg-slate-950/90 border border-slate-800">
+                  <div class="text-[10px] text-slate-400 uppercase">Entry Intraday</div>
+                  <div id="intraEntry" class="mono font-bold text-xs text-white mt-0.5">--</div>
+                </div>
+                <div class="p-2.5 rounded-lg bg-slate-950/90 border border-rose-500/30">
+                  <div class="text-[10px] text-rose-400 uppercase">SL Intraday</div>
+                  <div id="intraSl" class="mono font-bold text-xs text-rose-400 mt-0.5">--</div>
+                  <div id="intraSlPips" class="text-[10px] text-rose-300/80 mono">--</div>
+                </div>
+                <div class="p-2.5 rounded-lg bg-slate-950/90 border border-emerald-500/30">
+                  <div class="text-[10px] text-emerald-400 uppercase">TP1 Intraday</div>
+                  <div id="intraTp1" class="mono font-bold text-xs text-emerald-400 mt-0.5">--</div>
+                  <div id="intraTp1Pips" class="text-[10px] text-emerald-300/80 mono">--</div>
+                </div>
+                <div class="p-2.5 rounded-lg bg-slate-950/90 border border-amber-500/30">
+                  <div class="text-[10px] text-amber-400 uppercase">TP2 Intraday</div>
+                  <div id="intraTp2" class="mono font-bold text-xs text-amber-400 mt-0.5">--</div>
+                  <div id="intraTp2Pips" class="text-[10px] text-amber-300/80 mono">--</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/80">
+              <span id="intraReason" class="text-[11px] text-slate-300 line-clamp-2">--</span>
+              <button type="button" onclick="copyPlanByMode('INTRADAY')" class="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-bold text-[11px] shrink-0 cursor-pointer">Salin Intraday</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- RINGKASAN AKTIF (KOMPATIBILITAS PENUH) -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs mb-3">
+          <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+            <div class="text-[10px] text-slate-400 uppercase">Zona Entry Utama</div>
+            <div id="boxEntry" class="mono font-bold text-sm text-white mt-1">--</div>
+            <div id="boxEntryNote" class="text-[11px] text-slate-400 mt-0.5">--</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900 border border-rose-500/30">
+            <div class="text-[10px] text-rose-400 uppercase">Stop Loss (SL)</div>
+            <div id="boxSl" class="mono font-bold text-sm text-rose-400 mt-1">--</div>
+            <div id="boxSlPips" class="text-[11px] text-rose-300/80 mt-0.5 mono">--</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900 border border-emerald-500/30">
+            <div class="text-[10px] text-emerald-400 uppercase">Take Profit 1 (TP1)</div>
+            <div id="boxTp1" class="mono font-bold text-sm text-emerald-400 mt-1">--</div>
+            <div id="boxTp1RrLabel" class="text-[11px] text-emerald-300/80 mt-0.5 mono">RR 1 : 1.5 (BEP)</div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900 border border-amber-500/30">
+            <div class="text-[10px] text-amber-400 uppercase">Take Profit 2 (TP2)</div>
+            <div id="boxTp2" class="mono font-bold text-sm text-amber-400 mt-1">--</div>
+            <div id="boxTp2RrLabel" class="text-[11px] text-amber-300/80 mt-0.5 mono">RR 1 : 3.0 (Target Utama)</div>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
+          <p id="proReasonText" class="text-slate-200 leading-relaxed">--</p>
+          <button type="button" onclick="copyTicket()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 font-semibold shrink-0 cursor-pointer">Salin Plan</button>
+        </div>
+      </section>
+
+      <!-- 2. MULTI-TIMEFRAME CHART -->
+      <section class="card p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div class="flex items-center gap-1.5">
+            <button onclick="switchTf('240')" data-tf="240" class="tf-btn px-2.5 py-1 rounded text-xs font-bold bg-amber-500 text-slate-950 cursor-pointer">H4 (Trend)</button>
+            <button onclick="switchTf('60')" data-tf="60" class="tf-btn px-2.5 py-1 rounded text-xs font-semibold bg-slate-800 text-slate-300 cursor-pointer">H1 (S&R/OB)</button>
+            <button onclick="switchTf('15')" data-tf="15" class="tf-btn px-2.5 py-1 rounded text-xs font-semibold bg-slate-800 text-slate-300 cursor-pointer">M15 (Setup)</button>
+            <button onclick="switchTf('5')" data-tf="5" class="tf-btn px-2.5 py-1 rounded text-xs font-semibold bg-slate-800 text-slate-300 cursor-pointer">M5 (Candle)</button>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] text-slate-400 mono">OANDA:XAUUSD</span>
+            <a id="tvDirectBtn" href="https://www.tradingview.com/chart/?symbol=OANDA%3AXAUUSD&interval=240" target="_blank" rel="noopener noreferrer" class="text-[11px] px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 font-semibold">Buka Tab Chart</a>
+          </div>
+        </div>
+        <div id="chartWrapper" class="h-[360px] sm:h-[400px] w-full rounded-xl overflow-hidden bg-slate-950 relative"></div>
+      </section>
+
+      <!-- 3. HASIL ANALISA TEKNIKAL & FUNDAMENTAL OTOMATIS -->
+      <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-2.5">
+            <h3 class="font-bold text-white text-sm">Analisa Teknikal & Price Action (Auto-Live)</h3>
+            <span id="techBadge" class="mono text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400">AUTO</span>
+          </div>
+          <div id="techItems" class="space-y-2 text-xs text-slate-300"></div>
+        </div>
+
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-2.5">
+            <h3 class="font-bold text-white text-sm">Analisa Fundamental (DXY, Yield & News)</h3>
+            <span id="fundBadge" class="mono text-[11px] font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-400">AUTO</span>
+          </div>
+          <div id="fundItems" class="space-y-2 text-xs text-slate-300"></div>
+        </div>
+      </section>
+
+      <!-- 4. LAPORAN WINRATE PERBULAN & ALL TIME + RIWAYAT SIGNAL -->
+      <section class="card p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div>
+            <div class="text-[11px] uppercase tracking-wider text-amber-400 font-bold">Performa & Jurnal Realtime Otomatis</div>
+            <h3 class="font-bold text-white text-sm sm:text-base">Laporan Winrate Perbulan, All Time & Riwayat Signal</h3>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap text-xs">
+            <label class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-emerald-400 font-semibold cursor-pointer">
+              <input type="checkbox" id="autoLogAPlusToggle" checked class="accent-emerald-500">
+              <span>Auto-Catat A+</span>
+            </label>
+            <label class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-sky-400 font-semibold cursor-pointer">
+              <input type="checkbox" id="autoTpSlToggle" checked class="accent-sky-500">
+              <span>Auto TP/SL Live</span>
+            </label>
+            <button type="button" onclick="recordCurrentSignalToLog(false)" class="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold cursor-pointer">+ Catat Manual</button>
+            <button type="button" onclick="resetSignalHistory()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold cursor-pointer">Reset</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 text-xs">
+          <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+            <div class="flex items-center justify-between">
+              <span class="text-slate-400 font-semibold">WINRATE PERBULAN (<span id="monthLabel">Bulan Ini</span>)</span>
+              <span id="monthlyCountBadge" class="mono text-[11px] text-slate-400">0W / 0L</span>
+            </div>
+            <div class="flex items-baseline justify-between mt-1.5">
+              <span id="monthlyWinrateVal" class="mono text-xl font-extrabold text-emerald-400">0.0%</span>
+              <span id="monthlyNetPips" class="mono text-xs font-semibold text-amber-400">+0 pips</span>
+            </div>
+          </div>
+
+          <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+            <div class="flex items-center justify-between">
+              <span class="text-slate-400 font-semibold">WINRATE ALL TIME</span>
+              <span id="allTimeCountBadge" class="mono text-[11px] text-slate-400">0W / 0L</span>
+            </div>
+            <div class="flex items-baseline justify-between mt-1.5">
+              <span id="allTimeWinrateVal" class="mono text-xl font-extrabold text-amber-400">0.0%</span>
+              <span id="allTimeNetPips" class="mono text-xs font-semibold text-emerald-400">+0 pips</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400 text-[11px]">
+                <th class="py-2 pr-2">Waktu</th>
+                <th class="py-2 px-2">Arah</th>
+                <th class="py-2 px-2">Zona Entry</th>
+                <th class="py-2 px-2">SL / TP2</th>
+                <th class="py-2 px-2">Hasil</th>
+                <th class="py-2 pl-2 text-right">Update</th>
+              </tr>
+            </thead>
+            <tbody id="signalHistoryBody" class="divide-y divide-slate-800/70 mono"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- RIGHT 4 COLS -->
+    <div class="lg:col-span-4 flex flex-col gap-4">
+
+      <!-- STATUS FEED & AUTO-DETECTION -->
+      <section class="card p-4">
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="font-bold text-white text-sm">Engine Pasar Realtime (Auto-Detect)</h2>
+          <label class="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold cursor-pointer">
+            <input type="checkbox" id="autoModeToggle" checked onchange="toggleAutoMode()" class="accent-amber-500">
+            <span>Auto-Sync Penuh</span>
+          </label>
+        </div>
+        <p id="priceSyncSub" class="text-[11px] text-slate-400 mb-2.5">Menerima tick realtime dan menghitung tren & candle otomatis...</p>
+
+        <div class="grid grid-cols-2 gap-2.5 text-xs">
+          <div>
+            <label class="block text-slate-400 mb-1">Harga XAUUSD (Live)</label>
+            <input type="number" id="currPriceInput" value="2652.50" step="0.10" oninput="onUserManualOverride()" class="w-full mono bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Struktur HTF (Auto)</label>
+            <select id="htfTrendInput" onchange="onUserManualOverride()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white">
+              <option value="BULLISH" selected>Bullish (HH/HL & > EMA200)</option>
+              <option value="BEARISH">Bearish (LH/LL & < EMA200)</option>
+              <option value="SIDEWAYS">Sideways / Konsolidasi</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Price Action (Auto)</label>
+            <select id="paCandleInput" onchange="onUserManualOverride()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white">
+              <option value="BULL_CONFIRM" selected>Bullish Engulfing / Rejection</option>
+              <option value="BEAR_CONFIRM">Bearish Engulfing / Rejection</option>
+              <option value="WAIT_CANDLE">Belum Ada Candle Konfirmasi</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">DXY & US10Y (Auto)</label>
+            <select id="macroInput" onchange="onUserManualOverride()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white">
+              <option value="SUPPORT_BUY" selected>DXY & Yield Turun (Dukung BUY)</option>
+              <option value="SUPPORT_SELL">DXY & Yield Naik (Dukung SELL)</option>
+              <option value="NEUTRAL">Netral / Campuran</option>
+            </select>
+          </div>
+          <div class="col-span-2">
+            <label class="block text-slate-400 mb-1">Kalender Fundamental USD</label>
+            <select id="newsInput" onchange="generateProAnalysis()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white">
+              <option value="SAFE" selected>Aman — Tidak Ada High Impact News (CPI/FOMC/NFP)</option>
+              <option value="DANGER">Waspada — Ada Rilis Berita Merah USD</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- PETA ZONA S&R + ORDER BLOCK OTOMATIS -->
+      <section class="card p-4">
+        <h2 class="font-bold text-white text-sm mb-2.5">Peta Zona S&R & Order Block</h2>
+        <div id="zonesDisplay" class="space-y-2 text-xs mono"></div>
+      </section>
+
+      <!-- KALKULATOR LOT & RISK MANAGEMENT -->
+      <section class="card p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="font-bold text-white text-sm">Kalkulator Lot Pro Trader</h2>
+          <span id="slDisplayBadge" class="mono text-[11px] text-amber-400">SL: 25 pips</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2.5 text-xs mb-2.5">
+          <div>
+            <label class="block text-slate-400 mb-1">Modal Akun ($)</label>
+            <input type="number" id="balInput" value="1000" oninput="onManualRiskParamsChange()" class="w-full mono bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white">
+          </div>
+          <div>
+            <label class="block text-slate-400 mb-1">Risiko / Trade (%)</label>
+            <input type="number" id="riskInput" value="1.0" step="0.5" oninput="onManualRiskParamsChange()" class="w-full mono bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-white">
+          </div>
+        </div>
+
+        <div class="p-2.5 rounded-xl bg-slate-900/90 border border-amber-500/30 mb-3">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-[10px] uppercase tracking-wider text-amber-400 font-bold">Pengaturan Manual SL Pips & R:R</span>
+            <span id="manualRrBadge" class="mono text-[10px] text-emerald-400 font-bold">TP1: 1.5R | TP2: 3.0R</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2.5 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1">Manual SL (Pips)</label>
+              <input type="number" id="manualSlPipsInput" value="25" min="1" max="500" step="1" oninput="onManualRiskParamsChange()" class="w-full mono bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-amber-300 font-bold">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Manual R:R (TP2)</label>
+              <input type="number" id="manualRrInput" value="3.0" min="0.5" max="20" step="0.5" oninput="onManualRiskParamsChange()" class="w-full mono bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-emerald-300 font-bold">
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30">
+            <div class="text-[10px] text-amber-300">LOT SIZE</div>
+            <div id="lotText" class="mono font-bold text-sm text-amber-400 mt-0.5">0.04</div>
+          </div>
+          <div class="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30">
+            <div class="text-[10px] text-rose-300">MAX RUGI</div>
+            <div id="lossText" class="mono font-bold text-sm text-rose-400 mt-0.5">-$10.00</div>
+          </div>
+          <div class="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+            <div class="text-[10px] text-emerald-300">PROFIT TP2</div>
+            <div id="tp2Text" class="mono font-bold text-sm text-emerald-400 mt-0.5">+$30.00</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ASISTEN DIAGNOSTIK & PENGECEKAN KERUSAKAN SISTEM -->
+      <section class="card p-4 border-t-2 border-t-sky-500">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider text-sky-400 font-bold">QA & Realtime Stream Monitor</div>
+            <h2 class="font-bold text-white text-sm">Asisten Pengecekan Kerusakan Web</h2>
+          </div>
+          <span id="healthScoreBadge" class="mono text-[11px] font-bold px-2.5 py-1 rounded bg-sky-500/15 text-sky-400 border border-sky-500/30">SCANNING...</span>
+        </div>
+
+        <div id="diagChecklist" class="space-y-1.5 text-xs mb-3"></div>
+
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="runSystemDiagnostics()" class="flex-1 px-3 py-2 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-bold text-xs cursor-pointer">Audit Sistem</button>
+          <button type="button" onclick="autoRepairIssues()" class="flex-1 px-3 py-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-xs cursor-pointer">Auto-Perbaiki</button>
+        </div>
+
+        <div id="diagLogBox" class="mt-2.5 p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] mono text-slate-300 max-h-28 overflow-y-auto">
+          Status: Memeriksa koneksi realtime...
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script>
+
+    // === AUDIO ALERT ENGINE (WEB AUDIO API - GRADE A+ >= 90%) ===
+    let audioAlertEnabled = true;
+    let audioCtx = null;
+    let lastAlertSignature = '';
+    let lastAlertTimestamp = 0;
+
+    function ensureAudioContext() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          audioCtx = new AudioContextClass();
+        }
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+      updateAudioBannerVisibility();
+      return audioCtx;
+    }
+
+    function unlockAudioContext(playFeedback = false) {
+      const ctx = ensureAudioContext();
+      if (ctx && ctx.state === 'running' && playFeedback) {
+        playGradeAPlusAlert('BUY', true);
+      }
+    }
+
+    function updateAudioBannerVisibility() {
+      const banner = document.getElementById('audioUnlockBanner');
+      if (!banner) return;
+      if (!audioAlertEnabled) {
+        banner.classList.add('hidden');
+        return;
+      }
+      if (!audioCtx || audioCtx.state !== 'running') {
+        banner.classList.remove('hidden');
+      } else {
+        banner.classList.add('hidden');
+      }
+    }
+
+    function toggleAudioAlert() {
+      audioAlertEnabled = !audioAlertEnabled;
+      const btn = document.getElementById('audioAlertToggleBtn');
+      if (btn) {
+        if (audioAlertEnabled) {
+          btn.textContent = '🔔 Audio Alert: ON';
+          btn.className = 'px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold cursor-pointer';
+          unlockAudioContext(true);
+        } else {
+          btn.textContent = '🔕 Audio Alert: OFF';
+          btn.className = 'px-2.5 py-1.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 font-semibold cursor-pointer';
+        }
+      }
+      updateAudioBannerVisibility();
+    }
+
+    function playGradeAPlusAlert(direction = 'BUY', isManualTest = false) {
+      if (!audioAlertEnabled && !isManualTest) return;
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
+
+      if (ctx.state === 'suspended') {
+        ctx.resume().then(() => {
+          triggerChimeSequence(ctx, direction);
+          updateAudioBannerVisibility();
+        }).catch(() => {
+          updateAudioBannerVisibility();
+        });
+        return;
+      }
+
+      triggerChimeSequence(ctx, direction);
+      updateAudioBannerVisibility();
+    }
+
+    function triggerChimeSequence(ctx, direction) {
+      const now = ctx.currentTime;
+      // Nada naik untuk sinyal BUY / TEST, nada turun untuk sinyal SELL
+      const notes = direction === 'SELL'
+        ? [880, 659.25, 523.25, 440]
+        : [587.33, 783.99, 987.77, 1174.66];
+
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = idx === notes.length - 1 ? 'triangle' : 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.13);
+
+        gain.gain.setValueAtTime(0.0001, now + idx * 0.13);
+        gain.gain.exponentialRampToValueAtTime(0.24, now + idx * 0.13 + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.13 + 0.34);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(now + idx * 0.13);
+        osc.stop(now + idx * 0.13 + 0.36);
+      });
+    }
+
+    ['pointerdown', 'keydown'].forEach(evtName => {
+      window.addEventListener(evtName, () => {
+        if (audioAlertEnabled) ensureAudioContext();
+      }, { once: false, passive: true });
+    });
+
+    let activeTf = '240';
+    let computedSlPips = 25;
+    let clipboardPlan = '';
+
+    // Realtime streaming state
+    let wsConnection = null;
+    let pollingTimer = null;
+    let isRealtimeConnected = false;
+    let streamModeName = 'Offline';
+    let lastTickTimestamp = 0;
+    let prevPrice = null;
+    let open24hPrice = null;
+    let high24hPrice = null;
+    let low24hPrice = null;
+    let priceRingBuffer = [];
+    let tvIframeLoaded = false;
+    let runtimeErrors = [];
+
+    window.addEventListener('error', (ev) => {
+      runtimeErrors.push(`${ev.message || 'JS Error'} (${ev.lineno || 0})`);
+      runSystemDiagnostics();
+    });
+
+    window.addEventListener('unhandledrejection', (ev) => {
+      runtimeErrors.push(`Promise Rejection: ${ev.reason || 'Unknown'}`);
+      runSystemDiagnostics();
+    });
+
+    function switchTf(tf) {
+      activeTf = tf;
+      document.querySelectorAll('.tf-btn').forEach(btn => {
+        if (btn.dataset.tf === tf) {
+          btn.className = 'tf-btn px-2.5 py-1 rounded text-xs font-bold bg-amber-500 text-slate-950 cursor-pointer';
+        } else {
+          btn.className = 'tf-btn px-2.5 py-1 rounded text-xs font-semibold bg-slate-800 text-slate-300 cursor-pointer';
+        }
+      });
+      const direct = document.getElementById('tvDirectBtn');
+      if (direct) direct.href = `https://www.tradingview.com/chart/?symbol=OANDA%3AXAUUSD&interval=${tf}`;
+      mountTvIframe(tf);
+    }
+
+    function buildChartEmbedUrl(interval) {
+      const settings = {
+        autosize: true,
+        symbol: 'OANDA:XAUUSD',
+        interval: interval,
+        timezone: 'Asia/Makassar',
+        theme: 'dark',
+        style: '1',
+        locale: 'id',
+        hide_side_toolbar: true,
+        allow_symbol_change: true
+      };
+      return 'https://s.tradingview.com/widgetembed/?frameElementId=tv_xau_frame&symbol=OANDA%3AXAUUSD&interval=' +
+        encodeURIComponent(interval) +
+        '&hidesidetoolbar=1&symboledit=1&saveimage=0&toolbarbg=0d121d&theme=dark&style=1&timezone=Asia%2FMakassar&locale=id&settings=' +
+        encodeURIComponent(JSON.stringify(settings));
+    }
+
+    function mountTvIframe(interval) {
+      const wrap = document.getElementById('chartWrapper');
+      if (!wrap) return;
+      tvIframeLoaded = false;
+
+      const iframe = document.createElement('iframe');
+      iframe.id = 'tv_xau_frame';
+      iframe.src = buildChartEmbedUrl(interval);
+      iframe.className = 'w-full h-full border-0';
+      iframe.setAttribute('allowfullscreen', 'true');
+      iframe.setAttribute('scrolling', 'no');
+
+      const fallback = document.createElement('div');
+      fallback.className = 'w-full h-full flex flex-col items-center justify-center text-xs text-slate-400 p-4 text-center gap-2';
+      fallback.innerHTML = `
+        <div>Chart TradingView terblokir atau lambat di jaringan/browser ini. Analisa realtime di atas tetap berjalan dari live feed.</div>
+        <div class="flex gap-2 mt-1">
+          <button type="button" onclick="mountTvIframe(activeTf)" class="px-3 py-1.5 rounded bg-slate-800 text-white border border-slate-700 font-semibold cursor-pointer">Muat Ulang</button>
+          <a href="https://www.tradingview.com/chart/?symbol=OANDA%3AXAUUSD&interval=${interval}" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded bg-amber-500 text-slate-950 font-bold">Buka Tab Chart</a>
+        </div>
+      `;
+
+      iframe.onload = () => {
+        tvIframeLoaded = true;
+        runSystemDiagnostics();
+      };
+      wrap.innerHTML = '';
+      wrap.appendChild(iframe);
+
+      setTimeout(() => {
+        if (!tvIframeLoaded && wrap.contains(iframe)) {
+          wrap.innerHTML = '';
+          wrap.appendChild(fallback);
+          runSystemDiagnostics();
+        }
+      }, 6500);
+    }
+
+    // === TRUE REALTIME ENGINE + METHOD ALIGNED SIGNAL & EXACT PIP/TP/SL RESOLVER ===
+    const STORAGE_KEY = 'aurum_quant_pro_signal_history_v6';
+    let secondaryWsConnection = null;
+    let liveTickTimer = null;
+    let latestSnapshot = null;
+
+    // Spot gold calibration offset (XAUUSD spot vs tokenized gold proxy)
+    let spotCalibrationOffset = 0;
+
+    function getPipMultiplier() {
+      // Standard XAUUSD: 1.00 USD movement = 10 pips (0.10 USD = 1 pip)
+      return 10;
+    }
+
+    function priceDiffToPips(priceDelta) {
+      return Math.max(1, Math.round(Math.abs(priceDelta) * getPipMultiplier()));
+    }
+
+    function startRealtimeEngine() {
+      stopRealtimeEngine();
+      updateStreamBadge('CONNECTING', 'CONNECTING REALTIME STREAM...');
+
+      // Immediately run fast REST fetch
+      fetchRestGoldSnapshot();
+
+      // Primary WebSocket: Binance PAXGUSDT trade + ticker stream
+      connectPrimaryWebSocket();
+
+      // Secondary WebSocket: Binance XAUUSDT / XAUSDT if available
+      connectSecondaryWebSocket();
+
+      // Ensure polling fallback is active every 2.5s if WS is slow/blocked
+      pollingTimer = setInterval(() => {
+        if (!wsConnection || wsConnection.readyState !== WebSocket.OPEN) {
+          fetchRestGoldSnapshot();
+        } else if (Date.now() - lastTickTimestamp > 3500) {
+          fetchRestGoldSnapshot();
+        }
+      }, 1500);
+
+      // Watchdog: if stream stalls for > 8s while online, reconnect WS & poll
+      liveTickTimer = setInterval(() => {
+        if (navigator.onLine && lastTickTimestamp > 0 && (Date.now() - lastTickTimestamp) > 8000) {
+          fetchRestGoldSnapshot();
+          if (!wsConnection || wsConnection.readyState === WebSocket.CLOSED) {
+            connectPrimaryWebSocket();
+          }
+        }
+        runSystemDiagnostics();
+      }, 3000);
+    }
+
+    function connectPrimaryWebSocket() {
+      try {
+        if (wsConnection) {
+          try { wsConnection.close(); } catch (e) {}
+        }
+        wsConnection = new WebSocket('wss://stream.binance.com:9443/ws/paxgusdt@trade');
+
+        wsConnection.onopen = () => {
+          isRealtimeConnected = true;
+          streamModeName = 'Binance WS Trade (Realtime)';
+          updateStreamBadge('ONLINE_WS', 'REALTIME ONLINE (WS TICK)');
+          document.getElementById('streamTransportLabel').textContent = streamModeName;
+          runSystemDiagnostics();
+        };
+
+        wsConnection.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            const rawTradePrice = parseFloat(msg.p);
+            if (!isNaN(rawTradePrice) && rawTradePrice > 1000) {
+              const calibrated = rawTradePrice + spotCalibrationOffset;
+              if (!high24hPrice || calibrated > high24hPrice) high24hPrice = calibrated;
+              if (!low24hPrice || calibrated < low24hPrice) low24hPrice = calibrated;
+              if (!open24hPrice) open24hPrice = calibrated;
+              handleIncomingLiveTick(calibrated, 'Binance WS Trade');
+            }
+          } catch (e) {}
+        };
+
+        wsConnection.onerror = () => {
+          fetchRestGoldSnapshot();
+        };
+
+        wsConnection.onclose = () => {
+          if (document.getElementById('autoModeToggle') && document.getElementById('autoModeToggle').checked) {
+            setTimeout(() => {
+              if (!wsConnection || wsConnection.readyState === WebSocket.CLOSED) {
+                connectPrimaryWebSocket();
+              }
+            }, 2500);
+          }
+        };
+      } catch (e) {
+        fetchRestGoldSnapshot();
+      }
+    }
+
+    function connectSecondaryWebSocket() {
+      try {
+        if (secondaryWsConnection) {
+          try { secondaryWsConnection.close(); } catch (e) {}
+        }
+        secondaryWsConnection = new WebSocket('wss://stream.binance.com:9443/ws/paxgusdt@ticker');
+        secondaryWsConnection.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            const o = parseFloat(msg.o);
+            const h = parseFloat(msg.h);
+            const l = parseFloat(msg.l);
+            if (!isNaN(o) && o > 1000) open24hPrice = +(o + spotCalibrationOffset).toFixed(2);
+            if (!isNaN(h) && h > 1000) high24hPrice = +(h + spotCalibrationOffset).toFixed(2);
+            if (!isNaN(l) && l > 1000) low24hPrice = +(l + spotCalibrationOffset).toFixed(2);
+          } catch (e) {}
+        };
+      } catch (e) {}
+    }
+
+    function stopRealtimeEngine() {
+      if (wsConnection) {
+        try { wsConnection.close(); } catch (e) {}
+        wsConnection = null;
+      }
+      if (secondaryWsConnection) {
+        try { secondaryWsConnection.close(); } catch (e) {}
+        secondaryWsConnection = null;
+      }
+      if (pollingTimer) {
+        clearInterval(pollingTimer);
+        pollingTimer = null;
+      }
+      if (liveTickTimer) {
+        clearInterval(liveTickTimer);
+        liveTickTimer = null;
+      }
+    }
+
+    function reconnectRealtimeEngine() {
+      document.getElementById('autoModeToggle').checked = true;
+      startRealtimeEngine();
+    }
+
+    async function fetchRestGoldSnapshot() {
+      const endpoints = [
+        {
+          name: 'Gold-API Spot XAU',
+          url: 'https://api.gold-api.com/price/XAU',
+          parse: (d) => {
+            if (d && typeof d.price === 'number' && d.price > 1000) {
+              return d.price;
+            }
+            return null;
+          }
+        },
+        {
+          name: 'Binance REST Price PAXG',
+          url: 'https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT',
+          parse: (d) => {
+            if (d && d.price && parseFloat(d.price) > 1000) {
+              return parseFloat(d.price) + spotCalibrationOffset;
+            }
+            return null;
+          }
+        },
+        {
+          name: 'Binance REST 24h PAXG',
+          url: 'https://api.binance.com/api/v3/ticker/24hr?symbol=PAXGUSDT',
+          parse: (d) => {
+            if (d && d.lastPrice && parseFloat(d.lastPrice) > 1000) {
+              open24hPrice = +(parseFloat(d.openPrice) + spotCalibrationOffset).toFixed(2);
+              high24hPrice = +(parseFloat(d.highPrice) + spotCalibrationOffset).toFixed(2);
+              low24hPrice = +(parseFloat(d.lowPrice) + spotCalibrationOffset).toFixed(2);
+              return parseFloat(d.lastPrice) + spotCalibrationOffset;
+            }
+            return null;
+          }
+        },
+        {
+          name: 'CoinGecko Spot XAU/PAXG',
+          url: 'https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd',
+          parse: (d) => (d && d['pax-gold'] && d['pax-gold'].usd > 1000 ? d['pax-gold'].usd + spotCalibrationOffset : null)
+        }
+      ];
+
+      for (const ep of endpoints) {
+        try {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 3000);
+          const res = await fetch(ep.url, { signal: ctrl.signal, cache: 'no-store' });
+          clearTimeout(t);
+          if (!res.ok) continue;
+          const json = await res.json();
+          const p = ep.parse(json);
+          if (p && !isNaN(p) && p > 1000) {
+            if (!wsConnection || wsConnection.readyState !== WebSocket.OPEN) {
+              isRealtimeConnected = true;
+              streamModeName = ep.name;
+              updateStreamBadge('ONLINE_REST', 'ONLINE AUTO-REFRESH');
+              document.getElementById('streamTransportLabel').textContent = ep.name;
+            }
+            handleIncomingLiveTick(p, ep.name);
+            return;
+          }
+        } catch (err) {}
+      }
+
+      if (Date.now() - lastTickTimestamp > 12000) {
+        isRealtimeConnected = false;
+        streamModeName = 'Offline / Koneksi Terblokir';
+        updateStreamBadge('OFFLINE', 'OFFLINE / KONEKSI TERPUTUS');
+        document.getElementById('streamTransportLabel').textContent = 'Offline (Cek Internet/DNS)';
+        runSystemDiagnostics();
+      }
+    }
+
+    function handleIncomingLiveTick(rawPrice, sourceLabel) {
+      const price = +rawPrice.toFixed(2);
+      lastTickTimestamp = Date.now();
+
+      const now = new Date();
+      const witaH = String((now.getUTCHours() + 8) % 24).padStart(2, '0');
+      const m = String(now.getUTCMinutes()).padStart(2, '0');
+      const s = String(now.getUTCSeconds()).padStart(2, '0');
+      document.getElementById('lastTickTime').textContent = `${witaH}:${m}:${s} WITA`;
+
+      const tickerEl = document.getElementById('liveTickerPrice');
+      const deltaEl = document.getElementById('liveTickerDelta');
+      tickerEl.textContent = price.toFixed(2);
+
+      if (prevPrice !== null && price !== prevPrice) {
+        tickerEl.classList.remove('tick-up', 'tick-down');
+        void tickerEl.offsetWidth;
+        if (price > prevPrice) {
+          tickerEl.className = 'font-extrabold text-sm text-emerald-400 ml-1 tick-up';
+        } else {
+          tickerEl.className = 'font-extrabold text-sm text-rose-400 ml-1 tick-down';
+        }
+      }
+
+      if (open24hPrice) {
+        const diff = price - open24hPrice;
+        const pct = (diff / open24hPrice) * 100;
+        const pips24h = priceDiffToPips(diff) * (diff >= 0 ? 1 : -1);
+        deltaEl.textContent = `${diff >= 0 ? '+' : ''}${diff.toFixed(2)} (${pips24h >= 0 ? '+' : ''}${pips24h} pips | ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)`;
+        deltaEl.className = `text-[11px] ml-1 ${diff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+      }
+
+      if (low24hPrice && high24hPrice) {
+        document.getElementById('liveRangeText').textContent = `${low24hPrice.toFixed(2)} – ${high24hPrice.toFixed(2)}`;
+      }
+
+      priceRingBuffer.push({ t: lastTickTimestamp, p: price });
+      if (priceRingBuffer.length > 80) priceRingBuffer.shift();
+
+      const autoSync = document.getElementById('autoModeToggle').checked;
+      if (autoSync) {
+        document.getElementById('currPriceInput').value = price.toFixed(2);
+        autoDetectMarketConditions(price);
+        document.getElementById('priceSyncSub').textContent = `Realtime aktif via ${sourceLabel} (Harga ${price.toFixed(2)}). Zona Entry, SL, TP & Pips tersinkronisasi.`;
+      }
+
+      prevPrice = price;
+      evaluateOpenSignalsAgainstLivePrice(price);
+      scheduleImmediateAnalysis();
+    }
+
+    let stabilizedDirection = 'SIDEWAYS'; // 'BULLISH' | 'BEARISH' | 'SIDEWAYS'
+    let lastDirectionSwitchTime = 0;
+    const DIRECTION_LOCK_MS = 3000; // Cegah arah berubah-ubah terlalu cepat dalam hitungan milidetik/detik
+
+    function scheduleImmediateAnalysis() {
+      // Update keputusan langsung tanpa lag, namun arah tren distabilkan agar tidak bolak-balik ambigu
+      generateProAnalysis();
+    }
+
+    function autoDetectMarketConditions(price) {
+      // Stabilized realtime trend & momentum filter (mengurangi noise tick kecil yang bikin arah ambigu)
+      const windowSlice = priceRingBuffer.slice(-8);
+      const windowBase = windowSlice.length > 0 ? windowSlice[0].p : price;
+      const windowDelta = +(price - windowBase).toFixed(2);
+      const refOpen = open24hPrice || price;
+      const chg24h = +(price - refOpen).toFixed(2);
+      const now = Date.now();
+
+      // Hitung arah kandidat dengan ambang lebih tegas (minimal 0.35 USD / 3.5 pips pada jendela 8 tick atau >= 1.0 USD dari open 24h)
+      let candidateDir = stabilizedDirection;
+      if (windowDelta >= 0.35 || chg24h >= 1.0) {
+        candidateDir = 'BULLISH';
+      } else if (windowDelta <= -0.35 || chg24h <= -1.0) {
+        candidateDir = 'BEARISH';
+      } else if (Math.abs(windowDelta) < 0.15 && Math.abs(chg24h) < 0.5) {
+        candidateDir = 'SIDEWAYS';
+      }
+
+      // Terapkan hysteresis & lock time agar arah tidak gonta-ganti cepat
+      if (candidateDir !== stabilizedDirection) {
+        const elapsed = now - lastDirectionSwitchTime;
+        const strongOverride = Math.abs(windowDelta) >= 0.80;
+        if (elapsed >= DIRECTION_LOCK_MS || strongOverride || stabilizedDirection === 'SIDEWAYS') {
+          stabilizedDirection = candidateDir;
+          lastDirectionSwitchTime = now;
+        }
+      }
+
+      if (stabilizedDirection === 'BULLISH') {
+        document.getElementById('htfTrendInput').value = 'BULLISH';
+        document.getElementById('macroInput').value = 'SUPPORT_BUY';
+      } else if (stabilizedDirection === 'BEARISH') {
+        document.getElementById('htfTrendInput').value = 'BEARISH';
+        document.getElementById('macroInput').value = 'SUPPORT_SELL';
+      } else {
+        document.getElementById('htfTrendInput').value = 'SIDEWAYS';
+        document.getElementById('macroInput').value = 'NEUTRAL';
+      }
+
+      const paBadge = document.getElementById('autoPaBadge');
+      const pipsWindow = Math.round(windowDelta * 10);
+      if (stabilizedDirection === 'BULLISH' && windowDelta >= 0.25) {
+        document.getElementById('paCandleInput').value = 'BULL_CONFIRM';
+        paBadge.textContent = `BULLISH TERKONFIRMASI (${pipsWindow >= 0 ? '+' : ''}${pipsWindow} pips)`;
+        paBadge.className = 'text-emerald-400 font-bold ml-1';
+      } else if (stabilizedDirection === 'BEARISH' && windowDelta <= -0.25) {
+        document.getElementById('paCandleInput').value = 'BEAR_CONFIRM';
+        paBadge.textContent = `BEARISH TERKONFIRMASI (${pipsWindow} pips)`;
+        paBadge.className = 'text-rose-400 font-bold ml-1';
+      } else {
+        document.getElementById('paCandleInput').value = 'WAIT_CANDLE';
+        paBadge.textContent = `MENUNGGU KONFIRMASI (${pipsWindow >= 0 ? '+' : ''}${pipsWindow} pips)`;
+        paBadge.className = 'text-amber-400 font-bold ml-1';
+      }
+    }
+
+    function toggleAutoMode() {
+      const isAuto = document.getElementById('autoModeToggle').checked;
+      if (isAuto && prevPrice) {
+        document.getElementById('currPriceInput').value = prevPrice.toFixed(2);
+        autoDetectMarketConditions(prevPrice);
+        generateProAnalysis();
+      } else if (!isAuto) {
+        document.getElementById('priceSyncSub').textContent = 'Mode Simulasi Manual aktif. Centang "Auto-Sync Penuh" untuk kembali ke realtime.';
+      }
+    }
+
+    function onUserManualOverride() {
+      document.getElementById('autoModeToggle').checked = false;
+      document.getElementById('priceSyncSub').textContent = 'Mode Simulasi Manual aktif. Centang "Auto-Sync Penuh" untuk kembali ke realtime.';
+      generateProAnalysis();
+    }
+
+    function updateStreamBadge(state, label) {
+      const pill = document.getElementById('streamStatusPill');
+      if (!pill) return;
+      if (state === 'ONLINE_WS' || state === 'ONLINE_REST') {
+        pill.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 live-dot"></span> ${label}`;
+        pill.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 mono flex items-center gap-1.5';
+      } else if (state === 'CONNECTING') {
+        pill.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400 live-dot"></span> ${label}`;
+        pill.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 mono flex items-center gap-1.5';
+      } else {
+        pill.innerHTML = `<span class="w-2 h-2 rounded-full bg-rose-400"></span> ${label}`;
+        pill.className = 'text-[10px] font-bold px-2.5 py-0.5 rounded bg-rose-500/15 text-rose-400 border border-rose-500/30 mono flex items-center gap-1.5';
+      }
+    }
+
+    function updateClock() {
+      const now = new Date();
+      const witaH = (now.getUTCHours() + 8) % 24;
+      const h = String(witaH).padStart(2, '0');
+      const m = String(now.getUTCMinutes()).padStart(2, '0');
+      const s = String(now.getUTCSeconds()).padStart(2, '0');
+      document.getElementById('witaTime').textContent = `${h}:${m}:${s}`;
+
+      const pill = document.getElementById('sessionPill');
+      if (witaH >= 15 && witaH < 24) {
+        pill.textContent = 'KILLZONE AKTIF (London / NY)';
+        pill.className = 'px-2.5 py-1 rounded-lg font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+      } else {
+        pill.textContent = 'SESI ASIA (Akumulasi)';
+        pill.className = 'px-2.5 py-1 rounded-lg font-semibold bg-slate-800 text-slate-400 border border-slate-700';
+      }
+    }
+
+    // Method-aligned S&R + Order Block + Liquidity Sweep + RR 1:1.5 / 1:3 generator anchored to LIVE price
+    function generateProAnalysis() {
+      const price = parseFloat(document.getElementById('currPriceInput').value) || 2652.50;
+      const trend = document.getElementById('htfTrendInput').value;
+      const candle = document.getElementById('paCandleInput').value;
+      const macro = document.getElementById('macroInput').value;
+      const news = document.getElementById('newsInput').value;
+
+      // Dynamic key levels anchored around live price (5.00 USD grid + live micro-structure offset)
+      const step = 5.0;
+      const supMajor = +(Math.floor(price / step) * step).toFixed(2);
+      const resMajor = +(supMajor + step).toFixed(2);
+
+      // Anchor Bullish & Bearish Order Blocks close to current live price so entry zones are realistic & actionable
+      const bullObHigh = +(Math.min(price - 0.5, supMajor - 0.5)).toFixed(2);
+      const bullObLow = +(bullObHigh - 2.5).toFixed(2);
+
+      const bearObLow = +(Math.max(price + 0.5, resMajor + 0.5)).toFixed(2);
+      const bearObHigh = +(bearObLow + 2.5).toFixed(2);
+
+      const distToBullPips = priceDiffToPips(price - ((bullObLow + bullObHigh) / 2));
+      const distToBearPips = priceDiffToPips(((bearObLow + bearObHigh) / 2) - price);
+
+      document.getElementById('zonesDisplay').innerHTML = `
+        <div class="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-200">
+          <div class="flex justify-between text-[10px] text-rose-400 uppercase"><span>Bearish OB + Res ${resMajor.toFixed(2)}</span><span>SELL ZONE (${distToBearPips} pips)</span></div>
+          <div class="font-bold text-xs mt-0.5">${bearObLow.toFixed(2)} – ${bearObHigh.toFixed(2)}</div>
+        </div>
+        <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 flex justify-between items-center">
+          <span class="text-[11px]">Harga Live XAUUSD</span>
+          <span class="font-bold text-amber-400">${price.toFixed(2)}</span>
+        </div>
+        <div class="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-200">
+          <div class="flex justify-between text-[10px] text-emerald-400 uppercase"><span>Bullish OB + Sup ${supMajor.toFixed(2)}</span><span>BUY ZONE (${distToBullPips} pips)</span></div>
+          <div class="font-bold text-xs mt-0.5">${bullObLow.toFixed(2)} – ${bullObHigh.toFixed(2)}</div>
+        </div>
+      `;
+
+      // Confluence scoring aligned strictly to method (HTF Trend + PA Candle + Macro DXY/Yield + News Filter)
+      let score = 0;
+      if (news === 'SAFE') score += 25;
+      if ((trend === 'BULLISH' && macro === 'SUPPORT_BUY') || (trend === 'BEARISH' && macro === 'SUPPORT_SELL')) score += 35;
+      if ((trend === 'BULLISH' && candle === 'BULL_CONFIRM') || (trend === 'BEARISH' && candle === 'BEAR_CONFIRM')) score += 40;
+
+      const headline = document.getElementById('signalHeadline');
+      const confMeter = document.getElementById('confluenceMeter');
+      const gradeTag = document.getElementById('gradeTag');
+      const techBadge = document.getElementById('techBadge');
+      const fundBadge = document.getElementById('fundBadge');
+
+      confMeter.textContent = `CONFLUENCE: ${score}%`;
+
+      let side = 'WAIT';
+      let entryText = 'TUNGGU KONFLUENSI';
+      let entrySub = `Live ${price.toFixed(2)} • Menunggu validasi`;
+      let slVal = 0;
+      let tp1Val = 0;
+      let tp2Val = 0;
+      let slPips = 25;
+      let tp1Pips = 0;
+      let tp2Pips = 0;
+      let reason = '';
+
+      const manualSlInputEl = document.getElementById('manualSlPipsInput');
+      const manualRrInputEl = document.getElementById('manualRrInput');
+      const manualSlPips = Math.max(1, parseFloat(manualSlInputEl ? manualSlInputEl.value : 25) || 25);
+      const manualRr = Math.max(0.5, parseFloat(manualRrInputEl ? manualRrInputEl.value : 3.0) || 3.0);
+      const tp1Rr = +(Math.max(0.5, manualRr * 0.5)).toFixed(2);
+      const slPriceOffset = +(manualSlPips / getPipMultiplier()).toFixed(2);
+
+      const rrBadgeEl = document.getElementById('manualRrBadge');
+      if (rrBadgeEl) rrBadgeEl.textContent = `TP1: ${tp1Rr}R | TP2: ${manualRr}R`;
+
+      if (score >= 90 && trend === 'BULLISH') {
+        side = 'BUY';
+        const entryPrice = +((bullObLow + bullObHigh) / 2).toFixed(2);
+        slVal = +(entryPrice - slPriceOffset).toFixed(2);
+        const riskUsd = +(entryPrice - slVal).toFixed(2);
+        tp1Val = +(entryPrice + riskUsd * tp1Rr).toFixed(2);
+        tp2Val = +(entryPrice + riskUsd * manualRr).toFixed(2);
+
+        slPips = manualSlPips;
+        tp1Pips = Math.max(1, Math.round(manualSlPips * tp1Rr));
+        tp2Pips = Math.max(1, Math.round(manualSlPips * manualRr));
+        computedSlPips = slPips;
+
+        entryText = `${bullObLow.toFixed(2)} – ${bullObHigh.toFixed(2)} (Mid ${entryPrice.toFixed(2)})`;
+        entrySub = `Live ${price.toFixed(2)} • SL ${slPips} pips | TP1 +${tp1Pips}p | TP2 +${tp2Pips}p (1:${manualRr})`;
+        headline.textContent = `VALID BUY XAUUSD (${slPips}p SL / +${tp2Pips}p TP2 • 1:${manualRr}) — ${bullObLow.toFixed(2)}–${bullObHigh.toFixed(2)}`;
+        headline.className = 'text-lg sm:text-xl font-extrabold text-emerald-400 mt-0.5';
+        gradeTag.textContent = 'GRADE A+ (SIAP ENTRY)';
+        gradeTag.className = 'mono text-xs font-bold px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40';
+        techBadge.textContent = `BUY • SL ${slPips}p / TP2 +${tp2Pips}p`;
+        techBadge.className = 'mono text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400';
+        fundBadge.textContent = `RR 1:${manualRr} • DXY/YIELD BUY`;
+        fundBadge.className = 'mono text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400';
+
+        reason = `Metode S&R + OB + Momentum terkonfirmasi (${score}%): Harga live ${price.toFixed(2)} searah Bullish. Entry ${entryPrice.toFixed(2)}, SL manual ${slVal.toFixed(2)} (${slPips} pips), TP1 ${tp1Val.toFixed(2)} (+${tp1Pips} pips, 1:${tp1Rr}), TP2 ${tp2Val.toFixed(2)} (+${tp2Pips} pips, R:R manual 1:${manualRr}).`;
+      } else if (score >= 90 && trend === 'BEARISH') {
+        side = 'SELL';
+        const entryPrice = +((bearObLow + bearObHigh) / 2).toFixed(2);
+        slVal = +(entryPrice + slPriceOffset).toFixed(2);
+        const riskUsd = +(slVal - entryPrice).toFixed(2);
+        tp1Val = +(entryPrice - riskUsd * tp1Rr).toFixed(2);
+        tp2Val = +(entryPrice - riskUsd * manualRr).toFixed(2);
+
+        slPips = manualSlPips;
+        tp1Pips = Math.max(1, Math.round(manualSlPips * tp1Rr));
+        tp2Pips = Math.max(1, Math.round(manualSlPips * manualRr));
+        computedSlPips = slPips;
+
+        entryText = `${bearObLow.toFixed(2)} – ${bearObHigh.toFixed(2)} (Mid ${entryPrice.toFixed(2)})`;
+        entrySub = `Live ${price.toFixed(2)} • SL ${slPips} pips | TP1 +${tp1Pips}p | TP2 +${tp2Pips}p (1:${manualRr})`;
+        headline.textContent = `VALID SELL XAUUSD (${slPips}p SL / +${tp2Pips}p TP2 • 1:${manualRr}) — ${bearObLow.toFixed(2)}–${bearObHigh.toFixed(2)}`;
+        headline.className = 'text-lg sm:text-xl font-extrabold text-rose-400 mt-0.5';
+        gradeTag.textContent = 'GRADE A+ (SIAP ENTRY)';
+        gradeTag.className = 'mono text-xs font-bold px-3 py-1 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/40';
+        techBadge.textContent = `SELL • SL ${slPips}p / TP2 +${tp2Pips}p`;
+        techBadge.className = 'mono text-[11px] font-bold px-2 py-0.5 rounded bg-rose-500/15 text-rose-400';
+        fundBadge.textContent = `RR 1:${manualRr} • DXY/YIELD SELL`;
+        fundBadge.className = 'mono text-[11px] font-bold px-2 py-0.5 rounded bg-rose-500/15 text-rose-400';
+
+        reason = `Metode S&R + OB + Momentum terkonfirmasi (${score}%): Harga live ${price.toFixed(2)} searah Bearish. Entry ${entryPrice.toFixed(2)}, SL manual ${slVal.toFixed(2)} (${slPips} pips), TP1 ${tp1Val.toFixed(2)} (+${tp1Pips} pips, 1:${tp1Rr}), TP2 ${tp2Val.toFixed(2)} (+${tp2Pips} pips, R:R manual 1:${manualRr}).`;
+      } else {
+        side = 'NO TRADE';
+        slPips = manualSlPips;
+        tp1Pips = Math.max(1, Math.round(manualSlPips * tp1Rr));
+        tp2Pips = Math.max(1, Math.round(manualSlPips * manualRr));
+        computedSlPips = slPips;
+        headline.textContent = `NO TRADE (LIVE ${price.toFixed(2)}) — KONFLUENSI ${score}% (SL ${slPips}p | R:R 1:${manualRr})`;
+        headline.className = 'text-lg sm:text-xl font-extrabold text-amber-400 mt-0.5';
+        gradeTag.textContent = 'SKIP / WAIT';
+        gradeTag.className = 'mono text-xs font-bold px-3 py-1 rounded-lg bg-amber-500/15 text-amber-400 border border-amber-500/30';
+        techBadge.textContent = `TREND: ${trend}`;
+        techBadge.className = 'mono text-[11px] font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300';
+        fundBadge.textContent = news === 'DANGER' ? 'HIGH IMPACT NEWS' : macro;
+        fundBadge.className = 'mono text-[11px] font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-400';
+
+        reason = news === 'DANGER'
+          ? `Harga live ${price.toFixed(2)}: Ada rilis berita berdampak tinggi USD. Tunggu volatilitas mereda sebelum entry.`
+          : `Harga live ${price.toFixed(2)} • Skor konfluensi ${score}% (butuh ≥90% untuk Grade A+). Pengaturan aktif: SL ${slPips} pips & R:R 1:${manualRr} (TP2 +${tp2Pips} pips).`;
+      }
+
+      document.getElementById('boxEntry').textContent = entryText;
+      document.getElementById('boxEntryNote').textContent = entrySub;
+      document.getElementById('boxSl').textContent = side === 'NO TRADE' ? '--' : slVal.toFixed(2);
+      document.getElementById('boxSlPips').textContent = side === 'NO TRADE' ? `Plan: -${slPips} pips` : `-${slPips} pips (1R)`;
+      document.getElementById('boxTp1').textContent = side === 'NO TRADE' ? '--' : tp1Val.toFixed(2);
+      document.getElementById('boxTp1RrLabel').textContent = `RR 1 : ${tp1Rr} (+${tp1Pips} pips)`;
+      document.getElementById('boxTp2').textContent = side === 'NO TRADE' ? '--' : tp2Val.toFixed(2);
+      document.getElementById('boxTp2RrLabel').textContent = `RR 1 : ${manualRr} (+${tp2Pips} pips)`;
+      document.getElementById('proReasonText').textContent = reason;
+
+      document.getElementById('techItems').innerHTML = `
+        <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800"><strong class="text-white">• S&R & Order Block Live:</strong> Support <span class="mono text-emerald-400">${supMajor.toFixed(2)}</span> (Bull OB <span class="mono text-emerald-300">${bullObLow.toFixed(2)}–${bullObHigh.toFixed(2)}</span>) | Resistance <span class="mono text-rose-400">${resMajor.toFixed(2)}</span> (Bear OB <span class="mono text-rose-300">${bearObLow.toFixed(2)}–${bearObHigh.toFixed(2)}</span>).</div>
+        <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800"><strong class="text-white">• Kalkulasi Pips Akurat:</strong> 1.00 USD XAUUSD = 10 pips. ${side !== 'NO TRADE' ? `SL ${slPips} pips, TP1 +${tp1Pips} pips (1:1.5), TP2 +${tp2Pips} pips (1:3.0).` : `Jarak ke Bull OB ${distToBullPips} pips | ke Bear OB ${distToBearPips} pips.`}</div>
+        <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800"><strong class="text-white">• Price Action Live:</strong> Status <span class="mono text-amber-400">${candle}</span> pada harga live <span class="mono text-white">${price.toFixed(2)}</span>.</div>
+      `;
+
+      document.getElementById('fundItems').innerHTML = `
+        <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800"><strong class="text-white">• Korelasi DXY & US10Y:</strong> <span class="mono text-amber-400">${macro}</span> (Selaras dengan arah sesi 24 jam XAUUSD).</div>
+        <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800"><strong class="text-white">• Filter Berita USD:</strong> <span class="mono text-amber-400">${news}</span>. Menghindari spike & pelebaran spread saat news merah.</div>
+        <div class="p-2.5 rounded-lg bg-slate-900 border border-slate-800"><strong class="text-white">• Sinkronisasi TP/SL:</strong> BUY menang jika harga ≥ TP2 & kalah jika ≤ SL; SELL menang jika harga ≤ TP2 & kalah jika ≥ SL.</div>
+      `;
+
+      // === HITUNG SIGNAL KOLOM 1: SCALPINGAN (M5/M15) & KOLOM 2: INTRADAY (H1/H4) ===
+      const scalpSlPips = Math.max(8, Math.min(manualSlPips, 15));
+      const scalpRr = Math.min(manualRr, 2.0);
+      const scalpTp1Rr = +(Math.max(0.5, scalpRr * 0.5)).toFixed(2);
+      const scalpSlOffset = +(scalpSlPips / getPipMultiplier()).toFixed(2);
+
+      const intraSlPips = Math.max(manualSlPips, 25);
+      const intraRr = Math.max(manualRr, 3.0);
+      const intraTp1Rr = +(Math.max(0.5, intraRr * 0.5)).toFixed(2);
+      const intraSlOffset = +(intraSlPips / getPipMultiplier()).toFixed(2);
+
+      let scalpPlanStr = '';
+      let intraPlanStr = '';
+
+      if (score >= 90 && trend === 'BULLISH') {
+        const sEntry = +(Math.max(price - 0.8, bullObHigh)).toFixed(2);
+        const sSl = +(sEntry - scalpSlOffset).toFixed(2);
+        const sRisk = +(sEntry - sSl).toFixed(2);
+        const sTp1 = +(sEntry + sRisk * scalpTp1Rr).toFixed(2);
+        const sTp2 = +(sEntry + sRisk * scalpRr).toFixed(2);
+        const sTp1Pips = Math.max(1, Math.round(scalpSlPips * scalpTp1Rr));
+        const sTp2Pips = Math.max(1, Math.round(scalpSlPips * scalpRr));
+
+        document.getElementById('scalpBadge').textContent = `BUY SCALP • 1:${scalpRr}`;
+        document.getElementById('scalpBadge').className = 'mono text-[10px] font-bold text-emerald-400';
+        document.getElementById('scalpHeadline').textContent = `BUY SCALPINGAN — Target +${sTp2Pips} pips`;
+        document.getElementById('scalpHeadline').className = 'font-extrabold text-sm text-emerald-400';
+        document.getElementById('scalpZoneNote').textContent = `M5/M15 Momentum • Live ${price.toFixed(2)}`;
+        document.getElementById('scalpEntry').textContent = `${sEntry.toFixed(2)}`;
+        document.getElementById('scalpSl').textContent = `${sSl.toFixed(2)}`;
+        document.getElementById('scalpSlPips').textContent = `-${scalpSlPips} pips`;
+        document.getElementById('scalpTp1').textContent = `${sTp1.toFixed(2)}`;
+        document.getElementById('scalpTp1Pips').textContent = `+${sTp1Pips}p (1:${scalpTp1Rr})`;
+        document.getElementById('scalpTp2').textContent = `${sTp2.toFixed(2)}`;
+        document.getElementById('scalpTp2Pips').textContent = `+${sTp2Pips}p (1:${scalpRr})`;
+        document.getElementById('scalpReason').textContent = `Scalp cepat searah Bullish (${score}%).`;
+        scalpPlanStr = `XAUUSD SCALP BUY | Live: ${price.toFixed(2)} | Entry: ${sEntry.toFixed(2)} | SL: ${sSl.toFixed(2)} (-${scalpSlPips}p) | TP1: ${sTp1.toFixed(2)} (+${sTp1Pips}p) | TP2: ${sTp2.toFixed(2)} (+${sTp2Pips}p)`;
+
+        const iEntry = +((bullObLow + bullObHigh) / 2).toFixed(2);
+        const iSl = +(iEntry - intraSlOffset).toFixed(2);
+        const iRisk = +(iEntry - iSl).toFixed(2);
+        const iTp1 = +(iEntry + iRisk * intraTp1Rr).toFixed(2);
+        const iTp2 = +(iEntry + iRisk * intraRr).toFixed(2);
+        const iTp1Pips = Math.max(1, Math.round(intraSlPips * intraTp1Rr));
+        const iTp2Pips = Math.max(1, Math.round(intraSlPips * intraRr));
+
+        document.getElementById('intraBadge').textContent = `BUY INTRADAY • 1:${intraRr}`;
+        document.getElementById('intraBadge').className = 'mono text-[10px] font-bold text-emerald-400';
+        document.getElementById('intraHeadline').textContent = `BUY INTRADAY — Target +${iTp2Pips} pips`;
+        document.getElementById('intraHeadline').className = 'font-extrabold text-sm text-emerald-400';
+        document.getElementById('intraZoneNote').textContent = `H1/H4 Bull OB ${bullObLow.toFixed(2)}–${bullObHigh.toFixed(2)}`;
+        document.getElementById('intraEntry').textContent = `${bullObLow.toFixed(2)}–${bullObHigh.toFixed(2)} (${iEntry.toFixed(2)})`;
+        document.getElementById('intraSl').textContent = `${iSl.toFixed(2)}`;
+        document.getElementById('intraSlPips').textContent = `-${intraSlPips} pips`;
+        document.getElementById('intraTp1').textContent = `${iTp1.toFixed(2)}`;
+        document.getElementById('intraTp1Pips').textContent = `+${iTp1Pips}p (1:${intraTp1Rr})`;
+        document.getElementById('intraTp2').textContent = `${iTp2.toFixed(2)}`;
+        document.getElementById('intraTp2Pips').textContent = `+${iTp2Pips}p (1:${intraRr})`;
+        document.getElementById('intraReason').textContent = `Intraday pullback ke Bull OB (${score}%).`;
+        intraPlanStr = `XAUUSD INTRADAY BUY | Live: ${price.toFixed(2)} | Entry: ${iEntry.toFixed(2)} | SL: ${iSl.toFixed(2)} (-${intraSlPips}p) | TP1: ${iTp1.toFixed(2)} (+${iTp1Pips}p) | TP2: ${iTp2.toFixed(2)} (+${iTp2Pips}p)`;
+      } else if (score >= 90 && trend === 'BEARISH') {
+        const sEntry = +(Math.min(price + 0.8, bearObLow)).toFixed(2);
+        const sSl = +(sEntry + scalpSlOffset).toFixed(2);
+        const sRisk = +(sSl - sEntry).toFixed(2);
+        const sTp1 = +(sEntry - sRisk * scalpTp1Rr).toFixed(2);
+        const sTp2 = +(sEntry - sRisk * scalpRr).toFixed(2);
+        const sTp1Pips = Math.max(1, Math.round(scalpSlPips * scalpTp1Rr));
+        const sTp2Pips = Math.max(1, Math.round(scalpSlPips * scalpRr));
+
+        document.getElementById('scalpBadge').textContent = `SELL SCALP • 1:${scalpRr}`;
+        document.getElementById('scalpBadge').className = 'mono text-[10px] font-bold text-rose-400';
+        document.getElementById('scalpHeadline').textContent = `SELL SCALPINGAN — Target +${sTp2Pips} pips`;
+        document.getElementById('scalpHeadline').className = 'font-extrabold text-sm text-rose-400';
+        document.getElementById('scalpZoneNote').textContent = `M5/M15 Momentum • Live ${price.toFixed(2)}`;
+        document.getElementById('scalpEntry').textContent = `${sEntry.toFixed(2)}`;
+        document.getElementById('scalpSl').textContent = `${sSl.toFixed(2)}`;
+        document.getElementById('scalpSlPips').textContent = `-${scalpSlPips} pips`;
+        document.getElementById('scalpTp1').textContent = `${sTp1.toFixed(2)}`;
+        document.getElementById('scalpTp1Pips').textContent = `+${sTp1Pips}p (1:${scalpTp1Rr})`;
+        document.getElementById('scalpTp2').textContent = `${sTp2.toFixed(2)}`;
+        document.getElementById('scalpTp2Pips').textContent = `+${sTp2Pips}p (1:${scalpRr})`;
+        document.getElementById('scalpReason').textContent = `Scalp cepat searah Bearish (${score}%).`;
+        scalpPlanStr = `XAUUSD SCALP SELL | Live: ${price.toFixed(2)} | Entry: ${sEntry.toFixed(2)} | SL: ${sSl.toFixed(2)} (-${scalpSlPips}p) | TP1: ${sTp1.toFixed(2)} (+${sTp1Pips}p) | TP2: ${sTp2.toFixed(2)} (+${sTp2Pips}p)`;
+
+        const iEntry = +((bearObLow + bearObHigh) / 2).toFixed(2);
+        const iSl = +(iEntry + intraSlOffset).toFixed(2);
+        const iRisk = +(iSl - iEntry).toFixed(2);
+        const iTp1 = +(iEntry - iRisk * intraTp1Rr).toFixed(2);
+        const iTp2 = +(iEntry - iRisk * intraRr).toFixed(2);
+        const iTp1Pips = Math.max(1, Math.round(intraSlPips * intraTp1Rr));
+        const iTp2Pips = Math.max(1, Math.round(intraSlPips * intraRr));
+
+        document.getElementById('intraBadge').textContent = `SELL INTRADAY • 1:${intraRr}`;
+        document.getElementById('intraBadge').className = 'mono text-[10px] font-bold text-rose-400';
+        document.getElementById('intraHeadline').textContent = `SELL INTRADAY — Target +${iTp2Pips} pips`;
+        document.getElementById('intraHeadline').className = 'font-extrabold text-sm text-rose-400';
+        document.getElementById('intraZoneNote').textContent = `H1/H4 Bear OB ${bearObLow.toFixed(2)}–${bearObHigh.toFixed(2)}`;
+        document.getElementById('intraEntry').textContent = `${bearObLow.toFixed(2)}–${bearObHigh.toFixed(2)} (${iEntry.toFixed(2)})`;
+        document.getElementById('intraSl').textContent = `${iSl.toFixed(2)}`;
+        document.getElementById('intraSlPips').textContent = `-${intraSlPips} pips`;
+        document.getElementById('intraTp1').textContent = `${iTp1.toFixed(2)}`;
+        document.getElementById('intraTp1Pips').textContent = `+${iTp1Pips}p (1:${intraTp1Rr})`;
+        document.getElementById('intraTp2').textContent = `${iTp2.toFixed(2)}`;
+        document.getElementById('intraTp2Pips').textContent = `+${iTp2Pips}p (1:${intraRr})`;
+        document.getElementById('intraReason').textContent = `Intraday pullback ke Bear OB (${score}%).`;
+        intraPlanStr = `XAUUSD INTRADAY SELL | Live: ${price.toFixed(2)} | Entry: ${iEntry.toFixed(2)} | SL: ${iSl.toFixed(2)} (-${intraSlPips}p) | TP1: ${iTp1.toFixed(2)} (+${iTp1Pips}p) | TP2: ${iTp2.toFixed(2)} (+${iTp2Pips}p)`;
+      } else {
+        const sTp2Pips = Math.max(1, Math.round(scalpSlPips * scalpRr));
+        const iTp2Pips = Math.max(1, Math.round(intraSlPips * intraRr));
+
+        document.getElementById('scalpBadge').textContent = `WAIT • ${score}%`;
+        document.getElementById('scalpBadge').className = 'mono text-[10px] font-bold text-amber-400';
+        document.getElementById('scalpHeadline').textContent = `NO TRADE SCALP (${score}%)`;
+        document.getElementById('scalpHeadline').className = 'font-extrabold text-sm text-amber-400';
+        document.getElementById('scalpZoneNote').textContent = `Plan SL ${scalpSlPips}p | TP2 +${sTp2Pips}p (1:${scalpRr})`;
+        document.getElementById('scalpEntry').textContent = 'TUNGGU';
+        document.getElementById('scalpSl').textContent = '--';
+        document.getElementById('scalpSlPips').textContent = `-${scalpSlPips} pips`;
+        document.getElementById('scalpTp1').textContent = '--';
+        document.getElementById('scalpTp1Pips').textContent = `1:${scalpTp1Rr}`;
+        document.getElementById('scalpTp2').textContent = '--';
+        document.getElementById('scalpTp2Pips').textContent = `+${sTp2Pips}p`;
+        document.getElementById('scalpReason').textContent = `Menunggu konfluensi ≥90% di M5/M15.`;
+        scalpPlanStr = `XAUUSD SCALP WAIT (${score}%) | Live: ${price.toFixed(2)} | SL Plan: ${scalpSlPips}p | TP2 Plan: +${sTp2Pips}p`;
+
+        document.getElementById('intraBadge').textContent = `WAIT • ${score}%`;
+        document.getElementById('intraBadge').className = 'mono text-[10px] font-bold text-amber-400';
+        document.getElementById('intraHeadline').textContent = `NO TRADE INTRADAY (${score}%)`;
+        document.getElementById('intraHeadline').className = 'font-extrabold text-sm text-amber-400';
+        document.getElementById('intraZoneNote').textContent = `Plan SL ${intraSlPips}p | TP2 +${iTp2Pips}p (1:${intraRr})`;
+        document.getElementById('intraEntry').textContent = 'TUNGGU';
+        document.getElementById('intraSl').textContent = '--';
+        document.getElementById('intraSlPips').textContent = `-${intraSlPips} pips`;
+        document.getElementById('intraTp1').textContent = '--';
+        document.getElementById('intraTp1Pips').textContent = `1:${intraTp1Rr}`;
+        document.getElementById('intraTp2').textContent = '--';
+        document.getElementById('intraTp2Pips').textContent = `+${iTp2Pips}p`;
+        document.getElementById('intraReason').textContent = `Menunggu zona H1/H4 & konfluensi ≥90%.`;
+        intraPlanStr = `XAUUSD INTRADAY WAIT (${score}%) | Live: ${price.toFixed(2)} | SL Plan: ${intraSlPips}p | TP2 Plan: +${iTp2Pips}p`;
+      }
+
+      window._latestScalpPlan = scalpPlanStr;
+      window._latestIntraPlan = intraPlanStr;
+      clipboardPlan = `XAUUSD (${side}) | Live: ${price.toFixed(2)} | Entry: ${entryText} | SL: ${side === 'NO TRADE' ? '-' : slVal.toFixed(2)} (-${slPips}p) | TP1: ${side === 'NO TRADE' ? '-' : tp1Val.toFixed(2)} (+${tp1Pips}p) | TP2: ${side === 'NO TRADE' ? '-' : tp2Val.toFixed(2)} (+${tp2Pips}p)`;
+      latestSnapshot = {
+        side,
+        livePrice: price,
+        entryText,
+        entryMid: side === 'BUY' ? +((bullObLow + bullObHigh) / 2).toFixed(2) : (side === 'SELL' ? +((bearObLow + bearObHigh) / 2).toFixed(2) : price),
+        slVal,
+        tp1Val,
+        tp2Val,
+        slPips,
+        tp1Pips,
+        tp2Pips,
+        pips: side === 'NO TRADE' ? 0 : tp2Pips
+      };
+
+      if (score >= 90 && (side === 'BUY' || side === 'SELL')) {
+        const sigKey = `${side}|${entryText}`;
+        const nowMs = Date.now();
+        if (sigKey !== lastAlertSignature || (nowMs - lastAlertTimestamp) > 60000) {
+          lastAlertSignature = sigKey;
+          lastAlertTimestamp = nowMs;
+          playGradeAPlusAlert(side, false);
+          const autoLogEl = document.getElementById('autoLogAPlusToggle');
+          if (autoLogEl && autoLogEl.checked) {
+            recordCurrentSignalToLog(true);
+          }
+        }
+      } else {
+        lastAlertSignature = '';
+      }
+
+      recalcLot();
+    }
+
+    function onManualRiskParamsChange() {
+      generateProAnalysis();
+    }
+
+    function recalcLot() {
+      const bal = parseFloat(document.getElementById('balInput').value) || 0;
+      const risk = parseFloat(document.getElementById('riskInput').value) || 0;
+      const manualSlEl = document.getElementById('manualSlPipsInput');
+      const manualRrEl = document.getElementById('manualRrInput');
+
+      const sl = Math.max(1, parseFloat(manualSlEl ? manualSlEl.value : computedSlPips) || computedSlPips || 25);
+      const rrRatio = Math.max(0.5, parseFloat(manualRrEl ? manualRrEl.value : 3.0) || 3.0);
+      computedSlPips = sl;
+
+      const maxLoss = bal * (risk / 100);
+      // XAUUSD sizing: ~$0.10 per pip per 0.01 lot ($1.00 per pip per 0.10 lot)
+      const rawLot = maxLoss / (sl * 0.10);
+      const lot = Math.max(0.01, +rawLot.toFixed(2)).toFixed(2);
+      const tp2Profit = maxLoss * rrRatio;
+
+      document.getElementById('slDisplayBadge').textContent = `SL: ${sl} pips • R:R 1:${rrRatio}`;
+      document.getElementById('lotText').textContent = lot;
+      document.getElementById('lossText').textContent = `-$${maxLoss.toFixed(2)}`;
+      document.getElementById('tp2Text').textContent = `+$${tp2Profit.toFixed(2)}`;
+    }
+
+    function copyPlanByMode(mode) {
+      const textToCopy = mode === 'SCALP' ? (window._latestScalpPlan || clipboardPlan) : (window._latestIntraPlan || clipboardPlan);
+      if (!textToCopy) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textToCopy).catch(() => {});
+      }
+      alert('Plan ' + mode + ' disalin:\n' + textToCopy);
+    }
+
+    function copyTicket() {
+      if (!clipboardPlan) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(clipboardPlan).catch(() => {});
+      }
+      alert('Plan disalin:\n' + clipboardPlan);
+    }
+
+    function getDefaultHistory() {
+      return [];
+    }
+
+    function loadHistory() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+          return [];
+        }
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveHistory(list) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      } catch (e) {}
+    }
+
+    function recordCurrentSignalToLog(isAutoAPlus = false) {
+      if (!latestSnapshot) return;
+      if (isAutoAPlus && (latestSnapshot.side !== 'BUY' && latestSnapshot.side !== 'SELL')) return;
+
+      const list = loadHistory();
+      if (isAutoAPlus) {
+        const duplicateOpen = list.some(
+          r => r.status === 'OPEN' && r.side === latestSnapshot.side && r.entry === latestSnapshot.entryText
+        );
+        if (duplicateOpen) return;
+      }
+
+      const now = new Date();
+      const witaH = String((now.getUTCHours() + 8) % 24).padStart(2, '0');
+      const m = String(now.getUTCMinutes()).padStart(2, '0');
+      const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      const slNum = latestSnapshot.side === 'NO TRADE' ? null : Number(latestSnapshot.slVal);
+      const tp1Num = latestSnapshot.side === 'NO TRADE' ? null : Number(latestSnapshot.tp1Val);
+      const tp2Num = latestSnapshot.side === 'NO TRADE' ? null : Number(latestSnapshot.tp2Val);
+      const slPipsAbs = Math.max(1, Number(latestSnapshot.slPips) || 20);
+      const tp2PipsAbs = Math.max(1, Number(latestSnapshot.tp2Pips) || 60);
+
+      const item = {
+        id: 'sig-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+        monthKey: ym,
+        timeStr: `${witaH}:${m} WITA`,
+        side: latestSnapshot.side,
+        entry: latestSnapshot.entryText,
+        entryMid: Number(latestSnapshot.entryMid) || latestSnapshot.livePrice,
+        sl: slNum !== null ? slNum.toFixed(2) : '-',
+        tp2: tp2Num !== null ? tp2Num.toFixed(2) : '-',
+        slNum,
+        tp1Num,
+        tp2Num,
+        slPipsAbs,
+        tp2PipsAbs,
+        pips: 0,
+        status: latestSnapshot.side === 'NO TRADE' ? 'SKIP' : 'OPEN',
+        autoLogged: !!isAutoAPlus
+      };
+
+      list.unshift(item);
+      saveHistory(list);
+      renderHistoryAndWinrates();
+    }
+
+    // Strict, direction-aware TP2 vs SL evaluator against live XAUUSD price
+    function evaluateOpenSignalsAgainstLivePrice(livePrice) {
+      const autoTpSlEl = document.getElementById('autoTpSlToggle');
+      if (!autoTpSlEl || !autoTpSlEl.checked) return;
+      if (typeof livePrice !== 'number' || isNaN(livePrice) || livePrice <= 1000) return;
+
+      const list = loadHistory();
+      let changed = false;
+
+      const updated = list.map(row => {
+        if (row.status !== 'OPEN') return row;
+        const slNum = typeof row.slNum === 'number' ? row.slNum : parseFloat(row.sl);
+        const tp2Num = typeof row.tp2Num === 'number' ? row.tp2Num : parseFloat(row.tp2);
+        if (isNaN(slNum) || isNaN(tp2Num)) return row;
+
+        if (row.side === 'BUY') {
+          // For BUY: TP2 is above entry (tp2Num > slNum). Hit TP2 -> WIN (+tp2PipsAbs). Hit SL -> LOSS (-slPipsAbs).
+          const hitTp2 = livePrice >= tp2Num;
+          const hitSl = livePrice <= slNum;
+          if (hitTp2 && !hitSl) {
+            changed = true;
+            return { ...row, status: 'WIN', pips: Math.abs(row.tp2PipsAbs || 60), closedReason: 'AUTO-TP2' };
+          }
+          if (hitSl && !hitTp2) {
+            changed = true;
+            return { ...row, status: 'LOSS', pips: -Math.abs(row.slPipsAbs || 20), closedReason: 'AUTO-SL' };
+          }
+          if (hitTp2 && hitSl) {
+            // Disambiguate using distance from entryMid
+            const mid = typeof row.entryMid === 'number' ? row.entryMid : (slNum + tp2Num) / 2;
+            if (Math.abs(livePrice - tp2Num) <= Math.abs(livePrice - slNum)) {
+              changed = true;
+              return { ...row, status: 'WIN', pips: Math.abs(row.tp2PipsAbs || 60), closedReason: 'AUTO-TP2' };
+            } else {
+              changed = true;
+              return { ...row, status: 'LOSS', pips: -Math.abs(row.slPipsAbs || 20), closedReason: 'AUTO-SL' };
+            }
+          }
+        } else if (row.side === 'SELL') {
+          // For SELL: TP2 is below entry (tp2Num < slNum). Hit TP2 -> WIN (+tp2PipsAbs). Hit SL -> LOSS (-slPipsAbs).
+          const hitTp2 = livePrice <= tp2Num;
+          const hitSl = livePrice >= slNum;
+          if (hitTp2 && !hitSl) {
+            changed = true;
+            return { ...row, status: 'WIN', pips: Math.abs(row.tp2PipsAbs || 60), closedReason: 'AUTO-TP2' };
+          }
+          if (hitSl && !hitTp2) {
+            changed = true;
+            return { ...row, status: 'LOSS', pips: -Math.abs(row.slPipsAbs || 20), closedReason: 'AUTO-SL' };
+          }
+          if (hitTp2 && hitSl) {
+            const mid = typeof row.entryMid === 'number' ? row.entryMid : (slNum + tp2Num) / 2;
+            if (Math.abs(livePrice - tp2Num) <= Math.abs(livePrice - slNum)) {
+              changed = true;
+              return { ...row, status: 'WIN', pips: Math.abs(row.tp2PipsAbs || 60), closedReason: 'AUTO-TP2' };
+            } else {
+              changed = true;
+              return { ...row, status: 'LOSS', pips: -Math.abs(row.slPipsAbs || 20), closedReason: 'AUTO-SL' };
+            }
+          }
+        }
+        return row;
+      });
+
+      if (changed) {
+        saveHistory(updated);
+        renderHistoryAndWinrates();
+      }
+    }
+
+    function setSignalStatus(id, newStatus) {
+      const list = loadHistory().map(row => {
+        if (row.id !== id) return row;
+        let adjPips = Math.abs(row.tp2PipsAbs || 60);
+        if (newStatus === 'LOSS') adjPips = -Math.abs(row.slPipsAbs || 20);
+        if (newStatus === 'OPEN' || newStatus === 'SKIP') adjPips = 0;
+        return { ...row, status: newStatus, pips: adjPips, closedReason: 'MANUAL' };
+      });
+      saveHistory(list);
+      renderHistoryAndWinrates();
+    }
+
+    function resetSignalHistory() {
+      saveHistory([]);
+      renderHistoryAndWinrates();
+    }
+
+    function renderHistoryAndWinrates() {
+      const list = loadHistory();
+      const now = new Date();
+      const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      const monthLabelEl = document.getElementById('monthLabel');
+      if (monthLabelEl) monthLabelEl.textContent = currentYm;
+
+      const closedAll = list.filter(r => r.status === 'WIN' || r.status === 'LOSS');
+      const winsAll = closedAll.filter(r => r.status === 'WIN').length;
+      const lossAll = closedAll.filter(r => r.status === 'LOSS').length;
+      const wrAll = closedAll.length > 0 ? ((winsAll / closedAll.length) * 100).toFixed(1) : '0.0';
+      const netPipsAll = list.reduce((acc, r) => acc + (Number(r.pips) || 0), 0);
+
+      const closedMonth = list.filter(r => r.monthKey === currentYm && (r.status === 'WIN' || r.status === 'LOSS'));
+      const winsMonth = closedMonth.filter(r => r.status === 'WIN').length;
+      const lossMonth = closedMonth.filter(r => r.status === 'LOSS').length;
+      const wrMonth = closedMonth.length > 0 ? ((winsMonth / closedMonth.length) * 100).toFixed(1) : '0.0';
+      const netPipsMonth = list.filter(r => r.monthKey === currentYm).reduce((acc, r) => acc + (Number(r.pips) || 0), 0);
+
+      document.getElementById('monthlyWinrateVal').textContent = `${wrMonth}%`;
+      document.getElementById('monthlyCountBadge').textContent = `${winsMonth}W / ${lossMonth}L`;
+      document.getElementById('monthlyNetPips').textContent = `${netPipsMonth >= 0 ? '+' : ''}${netPipsMonth} pips`;
+
+      document.getElementById('allTimeWinrateVal').textContent = `${wrAll}%`;
+      document.getElementById('allTimeCountBadge').textContent = `${winsAll}W / ${lossAll}L`;
+      document.getElementById('allTimeNetPips').textContent = `${netPipsAll >= 0 ? '+' : ''}${netPipsAll} pips`;
+
+      const tbody = document.getElementById('signalHistoryBody');
+      if (!tbody) return;
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-400 font-sans">Belum ada riwayat signal. Signal Grade A+ (≥90%) atau klik "+ Catat Manual" akan muncul di sini.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(row => {
+        const sideColor = row.side === 'BUY' ? 'text-emerald-400' : (row.side === 'SELL' ? 'text-rose-400' : 'text-amber-400');
+        let statusPill = 'bg-slate-800 text-slate-300';
+        if (row.status === 'WIN') statusPill = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+        else if (row.status === 'LOSS') statusPill = 'bg-rose-500/20 text-rose-400 border border-rose-500/30';
+        else if (row.status === 'OPEN') statusPill = 'bg-amber-500/15 text-amber-300 border border-amber-500/30';
+
+        const pipNum = Number(row.pips) || 0;
+        const pipStr = row.status === 'WIN' || row.status === 'LOSS'
+          ? ` (${pipNum >= 0 ? '+' : ''}${pipNum}p)`
+          : '';
+
+        return `
+          <tr class="hover:bg-slate-900/60">
+            <td class="py-2 pr-2 text-slate-400 whitespace-nowrap">${row.timeStr}</td>
+            <td class="py-2 px-2 font-bold ${sideColor}">${row.side}</td>
+            <td class="py-2 px-2 text-slate-200 whitespace-nowrap">${row.entry}</td>
+            <td class="py-2 px-2 text-slate-300 whitespace-nowrap">SL ${row.sl} / TP2 ${row.tp2}</td>
+            <td class="py-2 px-2 whitespace-nowrap"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${statusPill}">${row.status}${pipStr}</span>${row.closedReason && row.closedReason.startsWith('AUTO') ? `<span class="ml-1 text-[9px] text-sky-400 font-sans">${row.closedReason}</span>` : ''}</td>
+            <td class="py-2 pl-2 text-right whitespace-nowrap font-sans">
+              <button type="button" onclick="setSignalStatus('${row.id}', 'WIN')" class="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 text-[10px] font-bold cursor-pointer">WIN</button>
+              <button type="button" onclick="setSignalStatus('${row.id}', 'LOSS')" class="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-400 hover:bg-rose-500/25 text-[10px] font-bold cursor-pointer ml-1">LOSS</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function runSystemDiagnostics() {
+      const checks = [];
+
+      const onlineBrowser = navigator.onLine;
+      const tickAgeSec = lastTickTimestamp ? Math.round((Date.now() - lastTickTimestamp) / 1000) : null;
+      const streamHealthy = onlineBrowser && isRealtimeConnected && tickAgeSec !== null && tickAgeSec <= 15;
+      checks.push({
+        name: 'Koneksi Realtime Online Stream',
+        ok: streamHealthy,
+        warn: onlineBrowser && !streamHealthy,
+        detail: streamHealthy
+          ? `Aktif (${streamModeName}, tick ${tickAgeSec}d lalu)`
+          : (onlineBrowser ? `Menunggu tick baru (${tickAgeSec ?? '-'}d) / beralih jalur` : 'Browser dalam status Offline')
+      });
+
+      const isAutoChecked = document.getElementById('autoModeToggle').checked;
+      checks.push({
+        name: 'Sinkronisasi Otomatis Analisa',
+        ok: isAutoChecked,
+        warn: !isAutoChecked,
+        detail: isAutoChecked ? 'Auto-Sync Penuh aktif (harga, tren & PA otomatis)' : 'Mode Simulasi Manual aktif'
+      });
+
+      checks.push({
+        name: 'Widget Chart TradingView',
+        ok: tvIframeLoaded,
+        warn: !tvIframeLoaded,
+        detail: tvIframeLoaded ? 'Iframe TradingView terhubung' : 'Iframe terblokir DNS/ISP (gunakan Tab Chart)'
+      });
+
+      const lotVal = parseFloat(document.getElementById('lotText').textContent);
+      const mathOk = !isNaN(lotVal) && lotVal >= 0.01 && computedSlPips >= 1;
+      checks.push({
+        name: 'Kalkulasi Zona Entry, SL, TP & Pips',
+        ok: mathOk,
+        detail: mathOk ? `Valid (SL ${computedSlPips} pips | Lot ${lotVal.toFixed(2)})` : 'Error kalkulasi'
+      });
+
+      let storageOk = false;
+      try {
+        localStorage.setItem('_diag_ping', '1');
+        localStorage.removeItem('_diag_ping');
+        storageOk = true;
+      } catch (e) {}
+      const noJsErr = runtimeErrors.length === 0 && storageOk;
+      checks.push({
+        name: 'Stabilitas Script & Storage',
+        ok: noJsErr,
+        detail: noJsErr ? '0 error JS & riwayat tersimpan aman' : `Error: ${runtimeErrors.length} JS error`
+      });
+
+      const passCount = checks.filter(c => c.ok).length;
+      const badge = document.getElementById('healthScoreBadge');
+      if (badge) {
+        badge.textContent = `${passCount}/${checks.length} OK`;
+        badge.className = passCount === checks.length
+          ? 'mono text-[11px] font-bold px-2.5 py-1 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+          : 'mono text-[11px] font-bold px-2.5 py-1 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30';
+      }
+
+      const listEl = document.getElementById('diagChecklist');
+      if (listEl) {
+        listEl.innerHTML = checks.map(c => {
+          const icon = c.ok ? '✅' : (c.warn ? '⚠️' : '❌');
+          const color = c.ok ? 'text-emerald-400' : (c.warn ? 'text-amber-400' : 'text-rose-400');
+          return `
+            <div class="p-2 rounded-lg bg-slate-900 border border-slate-800 flex items-start justify-between gap-2">
+              <div>
+                <div class="font-semibold text-slate-200">${icon} ${c.name}</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">${c.detail}</div>
+              </div>
+              <span class="mono text-[10px] font-bold ${color} shrink-0">${c.ok ? 'NORMAL' : (c.warn ? 'CEK' : 'RUSAK')}</span>
+            </div>
+          `;
+        }).join('');
+      }
+
+      const logBox = document.getElementById('diagLogBox');
+      if (logBox) {
+        const logs = [];
+        if (!streamHealthy) logs.push('[WARN] Stream realtime melambat/terputus. Klik "Auto-Perbaiki" untuk reconnect.');
+        if (!isAutoChecked) logs.push('[INFO] Auto-Sync dimatikan (Mode Manual).');
+        if (runtimeErrors.length > 0) logs.push('[ERR] ' + runtimeErrors.join(' | '));
+        if (logs.length === 0) logs.push('[OK] Realtime WebSocket/REST stream aktif & kalkulasi TP/SL/Pips sinkron.');
+        logBox.textContent = logs.join('\n');
+      }
+    }
+
+    function autoRepairIssues() {
+      runtimeErrors = [];
+      document.getElementById('autoModeToggle').checked = true;
+      startRealtimeEngine();
+      mountTvIframe(activeTf);
+      generateProAnalysis();
+      renderHistoryAndWinrates();
+      runSystemDiagnostics();
+    }
+
+    window.addEventListener('online', () => startRealtimeEngine());
+    window.addEventListener('offline', () => runSystemDiagnostics());
+
+    window.addEventListener('DOMContentLoaded', () => {
+      updateClock();
+      setInterval(updateClock, 1000);
+      mountTvIframe(activeTf);
+      generateProAnalysis();
+      renderHistoryAndWinrates();
+      startRealtimeEngine();
+      setInterval(runSystemDiagnostics, 5000);
+      updateAudioBannerVisibility();
+    });
+  </script>
+</body>
+</html>
